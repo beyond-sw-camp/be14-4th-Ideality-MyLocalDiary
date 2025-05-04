@@ -16,7 +16,7 @@
 #### [🛠 기술 스택](#-기술-스택)  <br>
 #### [🌐 외부 API 및 주요 구현 기술](#-외부-api-및-주요-구현-기술)  <br>
 #### [🕹️ 시스템 아키텍쳐](#-시스템-아키텍쳐)  <br>
-#### [🔄 ci/cd](#-ci/cd)  <br>
+#### [🔄 CI / CD](#-CI-/-CD) <br>
 #### [🧾 jenkins script](#-jenkins-script)  <br>
 #### [🧱 DDD](#-ddd)  <br>
 - [🧩 도메인 도출](#-도메인-도출)  <br>
@@ -179,7 +179,7 @@ My Local Diary는 이러한 흐름을 반영해, 누구나 개인화된 로컬 �
 ## 🕹️ 시스템 아키텍쳐
 <img src="https://github.com/2TEAM-Ideality/be14-4th-Ideality-MyLocalDiary/blob/main/resources/SystemArchitecture.png" />
 
-## 🔄 CI/CD
+## 🔄 CI / CD
 <img src="https://github.com/2TEAM-Ideality/be14-4th-Ideality-MyLocalDiary/blob/main/resources/front-pipe.png" />
 <img src="https://github.com/2TEAM-Ideality/be14-4th-Ideality-MyLocalDiary/blob/main/resources/back-pipe.png" />
 <img src="https://github.com/2TEAM-Ideality/be14-4th-Ideality-MyLocalDiary/blob/main/resources/argocd.png" />
