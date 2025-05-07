@@ -185,8 +185,218 @@ My Local Diary는 이러한 흐름을 반영해, 누구나 개인화된 로컬 �
 <img src="https://github.com/2TEAM-Ideality/be14-4th-Ideality-MyLocalDiary/blob/main/resources/argocd.png" />
 
 ## 🧾 Jenkins Script
-<img src="https://github.com/2TEAM-Ideality/be14-4th-Ideality-MyLocalDiary/blob/main/resources/front-script.png" />
-<img src="https://github.com/2TEAM-Ideality/be14-4th-Ideality-MyLocalDiary/blob/main/resources/back-script.png" />
+<details>
+<summary>front-pipe</summary>
+
+``` groovy
+stages {
+        stage('Create .env') {
+            steps {
+                withCredentials([
+                    string(credentialsId: 'VITE_NAVER_MAP_CLIENT_ID', variable: 'VITE_NAVER_MAP_CLIENT_ID'),
+                    string(credentialsId: 'VITE_NAVER_SEARCH_CLIENT_ID', variable: 'VITE_NAVER_SEARCH_CLIENT_ID'),
+                    string(credentialsId: 'VITE_NAVER_SEARCH_CLIENT_SECRET', variable: 'VITE_NAVER_SEARCH_CLIENT_SECRET'),
+                ]) {
+                    script {
+                        writeFile file: "${ENV_FILE}", text: """
+                            VITE_NAVER_MAP_CLIENT_ID=${VITE_NAVER_MAP_CLIENT_ID}
+                            VITE_NAVER_SEARCH_CLIENT_ID=${VITE_NAVER_SEARCH_CLIENT_ID}
+                            VITE_NAVER_SEARCH_CLIENT_SECRET=${VITE_NAVER_SEARCH_CLIENT_SECRET}
+                        """.stripIndent().trim()
+                    }
+                }
+            }
+        }
+        stage('Preparation') {
+            steps {
+                script {
+                    if (isUnix()) {
+                        sh 'docker --version'
+                    } else {
+                        bat 'docker --version'
+                    }
+                }
+            }
+        }
+        stage('Source Build') {
+            steps {
+                git branch: 'main', url: "${env.GITHUB_URL}"
+                script {
+                    if (isUnix()) {
+                        sh "cd my-local-diary && npm install"
+                        sh "cd my-local-diary && npm run build"
+                    } else {
+                        bat "cd my-local-diary && npm install"
+                        bat "cd my-local-diary && npm run build"
+                    }
+                }
+            }
+        }
+        stage('Container Build and Push') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'DOCKERHUB_PASSWORD', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        if (isUnix()) {
+                            sh "docker build -t ${DOCKER_USER}/my_local_diary_front:${currentBuild.number} ./my-local-diary"
+                            sh "docker build -t ${DOCKER_USER}/my_local_diary_front:latest ./my-local-diary"
+                            sh "docker login -u ${DOCKER_USER} -p ${DOCKER_PASS}"
+                            sh "docker push ${DOCKER_USER}/my_local_diary_front:${currentBuild.number}"
+                            sh "docker push ${DOCKER_USER}/my_local_diary_front:latest"
+                        } else {
+                            bat "docker build -t ${DOCKER_USER}/my_local_diary_front:${currentBuild.number} ./my-local-diary"
+                            bat "docker build -t ${DOCKER_USER}/my_local_diary_front:latest ./my-local-diary"
+                            bat "docker login -u %DOCKER_USER% -p %DOCKER_PASS%"
+                            bat "docker push ${DOCKER_USER}/my_local_diary_front:${currentBuild.number}"
+                            bat "docker push ${DOCKER_USER}/my_local_diary_front:latest"
+                        }
+                    }
+                }
+            }
+        }
+        stage('K8S Manifest Update') {
+            steps {
+                git credentialsId: 'github',
+                    url: "${env.MANIFESTS_GITHUB_URL}",
+                    branch: 'main'
+                
+                script { 
+                    withCredentials([usernamePassword(credentialsId: 'github', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS')]) {
+                        def githubUrl = env.MANIFESTS_GITHUB_URL.replace('https://', '')
+                        if (isUnix()) {
+                            sh "sed -i '' 's/my_local_diary_front:.*\$/my_local_diary_front:${currentBuild.number}/g' k8s/frontend-deploy.yml"
+                            sh "git add k8s/frontend-deploy.yml"
+                            sh "git config --global user.name '${env.GIT_USERNAME}'"
+                            sh "git config --global user.email '${env.GIT_EMAIL}'"
+                            sh "git commit -m '[UPDATE] ${currentBuild.number} image versioning'"
+                            sh "git push https://${GIT_USER}:${GIT_PASS}@${githubUrl} main"
+                        } else {
+                            bat "powershell -Command \"(Get-Content k8s/frontend-deploy.yml) -replace 'my_local_diary_front:.*', 'my_local_diary_front:${currentBuild.number}' | Set-Content k8s/frontend-deploy.yml\""
+                            bat "git add k8s/frontend-deploy.yml"
+                            bat "git config --global user.name '${env.GIT_USERNAME}'"
+                            bat "git config --global user.email '${env.GIT_EMAIL}'"
+                            bat "git commit -m \"[UPDATE] ${currentBuild.number} image versioning\""
+                            bat "git push https://%GIT_USER%:%GIT_PASS%@${githubUrl} main"
+                        }
+                    }
+                }
+            }
+        }
+    }
+```
+</details>
+
+<details>
+<summary>back-pipe</summary>
+
+``` groovy
+stages {
+        stage('Create secret.properties') {
+            steps {
+                withCredentials([
+                    string(credentialsId: 'DB_USERNAME', variable: 'DB_USERNAME'),
+                    string(credentialsId: 'DB_PASSWORD', variable: 'DB_PASSWORD'),
+                    string(credentialsId: 'S3_ACCESS_KEY', variable: 'S3_ACCESS_KEY'),
+                    string(credentialsId: 'S3_SECRET_ACCESS_KEY', variable: 'S3_SECRET_ACCESS_KEY'),
+                    string(credentialsId: 'KAKAO_REST_API_KEY', variable: 'REST_API_KEY'),
+                    string(credentialsId: 'server_secret_key', variable: 'secret_key'),
+                    string(credentialsId: 'EMAIL_USERNAME', variable: 'EMAIL_USERNAME'),
+                    string(credentialsId: 'EMAIL_PASSWORD', variable: 'EMAIL_PASSWORD'),
+                    string(credentialsId: 'VITE_NAVER_SEARCH_CLIENT_ID', variable: 'NAVER_SEARCH_CLIENT_ID'),
+                    string(credentialsId: 'VITE_NAVER_SEARCH_CLIENT_SECRET', variable: 'NAVER_SEARCH_CLIENT_SECRET')
+                ]) {
+                    script {
+                        writeFile file: "${ENV_FILE}", text: """
+                            DB_USERNAME=${DB_USERNAME}
+                            DB_PASSWORD=${DB_PASSWORD}
+                            S3_ACCESS_KEY=${S3_ACCESS_KEY}
+                            S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY}
+                            REST_API_KEY=${REST_API_KEY}
+                            secret_key=${secret_key}
+                            EMAIL_USERNAME=${EMAIL_USERNAME}
+                            EMAIL_PASSWORD=${EMAIL_PASSWORD}
+                            NAVER_SEARCH_CLIENT_ID=${NAVER_SEARCH_CLIENT_ID}
+                            NAVER_SEARCH_CLIENT_SECRET=${NAVER_SEARCH_CLIENT_SECRET}
+                        """.stripIndent().trim()
+                    }
+                }
+            }
+        }
+        stage('Preparation') {
+            steps {
+                script {
+                    if (isUnix()) {
+                        sh 'docker --version'
+                    } else {
+                        bat 'docker --version'
+                    }
+                }
+            }
+        }
+        stage('Source Build') {
+            steps {
+                git branch: 'main', url: "${env.GITHUB_URL}"
+                script {
+                    if (isUnix()) {
+                        sh "chmod +x ./gradlew"
+                        sh "./gradlew clean build"
+                    } else {
+                        bat "gradlew.bat clean build"
+                    }
+                }
+            }
+        }
+        stage('Container Build and Push') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'DOCKERHUB_PASSWORD', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        if (isUnix()) {
+                            sh "docker build -t ${DOCKER_USER}/my_local_diary_back:${currentBuild.number} ."
+                            sh "docker build -t ${DOCKER_USER}/my_local_diary_back:latest ."
+                            sh "docker login -u ${DOCKER_USER} -p ${DOCKER_PASS}"
+                            sh "docker push ${DOCKER_USER}/my_local_diary_back:${currentBuild.number}"
+                            sh "docker push ${DOCKER_USER}/my_local_diary_back:latest"
+                        } else {
+                            bat "docker build -t ${DOCKER_USER}/my_local_diary_back:${currentBuild.number} ."
+                            bat "docker build -t ${DOCKER_USER}/my_local_diary_back:latest ."
+                            bat "docker login -u %DOCKER_USER% -p %DOCKER_PASS%"
+                            bat "docker push ${DOCKER_USER}/my_local_diary_back:${currentBuild.number}"
+                            bat "docker push ${DOCKER_USER}/my_local_diary_back:latest"
+                        }
+                    }
+                }
+            }
+        }
+        stage('K8S Manifest Update') {
+            steps {
+                git credentialsId: 'github',
+                    url: "${env.MANIFESTS_GITHUB_URL}",
+                    branch: 'main'
+                
+                script { 
+                    withCredentials([usernamePassword(credentialsId: 'github', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS')]) {
+                        def githubUrl = env.MANIFESTS_GITHUB_URL.replace('https://', '')
+                        if (isUnix()) {
+                            sh "sed -i '' 's/my_local_diary_back:.*\$/my_local_diary_back:${currentBuild.number}/g' k8s/backend-deploy.yml"
+                            sh "git add k8s/backend-deploy.yml"
+                            sh "git config --global user.name '${env.GIT_USERNAME}'"
+                            sh "git config --global user.email '${env.GIT_EMAIL}'"
+                            sh "git commit -m '[UPDATE] ${currentBuild.number} image versioning'"
+                            sh "git push https://${GIT_USER}:${GIT_PASS}@${githubUrl} main"
+                        } else {
+                            bat "powershell -Command \"(Get-Content k8s/backend-deploy.yml) -replace 'my_local_diary_back:.*', 'my_local_diary_back:${currentBuild.number}' | Set-Content k8s/backend-deploy.yml\""
+                            bat "git add k8s/backend-deploy.yml"
+                            bat "git config --global user.name '${env.GIT_USERNAME}'"
+                            bat "git config --global user.email '${env.GIT_EMAIL}'"
+                            bat "git commit -m \"[UPDATE] ${currentBuild.number} image versioning\""
+                            bat "git push https://%GIT_USER%:%GIT_PASS%@${githubUrl} main"
+                        }
+                    }
+                }
+            }
+        }
+    }
+```
+</details>
 
 ## 🧱 DDD
 ### 🧩 도메인 도출
